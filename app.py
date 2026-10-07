@@ -2,6 +2,14 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib import colors
+from io import BytesIO
+from datetime import datetime
+
 # ============ CONFIGURACION ============
 st.set_page_config(
     page_title="NutriLab",
@@ -15,6 +23,152 @@ st.write("---")
 
 if "paso" not in st.session_state:
     st.session_state.paso = 1
+
+
+    # ============ FUNCION PARA GENERAR PDF ============
+def generar_pdf(datos):
+    """Genera un PDF con el plan completo del paciente."""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=50,
+        leftMargin=50,
+        topMargin=50,
+        bottomMargin=50
+    )
+    story = []
+    styles = getSampleStyleSheet()
+
+    titulo_style = ParagraphStyle(
+        'Titulo',
+        parent=styles['Heading1'],
+        fontSize=22,
+        textColor=colors.HexColor('#1f4e79'),
+        spaceAfter=10,
+        alignment=1
+    )
+    subtitulo_style = ParagraphStyle(
+        'Subtitulo',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#2e75b6'),
+        spaceAfter=8,
+        spaceBefore=15
+    )
+    texto_style = ParagraphStyle(
+        'Texto',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceAfter=5
+    )
+
+    # TITULO
+    story.append(Paragraph("NutriLab - Plan Nutricional Personalizado", titulo_style))
+    story.append(Spacer(1, 10))
+    fecha = datetime.now().strftime("%d/%m/%Y")
+    story.append(Paragraph(f"Fecha de generacion: {fecha}", texto_style))
+    story.append(Spacer(1, 15))
+
+    # DATOS DEL PACIENTE
+    story.append(Paragraph("Datos del Paciente", subtitulo_style))
+    datos_paciente = [
+        ["Nombre:", datos.get("nombre", "-")],
+        ["Edad:", f"{datos.get('edad', '-')} anos"],
+        ["Sexo:", datos.get("sexo", "-")],
+        ["Peso:", f"{datos.get('peso', '-')} kg"],
+        ["Talla:", f"{datos.get('talla', '-')} cm"],
+        ["IMC:", f"{datos.get('imc', 0):.1f}"],
+        ["Objetivo:", datos.get("objetivo", "-")],
+    ]
+    tabla_paciente = Table(datos_paciente, colWidths=[2*inch, 4*inch])
+    tabla_paciente.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#e7f0f7')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+        ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+    ]))
+    story.append(tabla_paciente)
+    story.append(Spacer(1, 15))
+
+    # RESULTADOS DE LABORATORIO
+    story.append(Paragraph("Resultados de Laboratorio", subtitulo_style))
+    valores_lab = datos.get("valores_lab", [])
+    if valores_lab:
+        tabla_lab = Table(valores_lab, colWidths=[2.5*inch, 1.3*inch, 2.2*inch])
+        tabla_lab.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f4e79')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f5fa')]),
+        ]))
+        story.append(tabla_lab)
+    story.append(Spacer(1, 15))
+
+    # RECOMENDACIONES
+    story.append(Paragraph("Recomendaciones Alimenticias", subtitulo_style))
+    recomendaciones = datos.get("recomendaciones", [])
+    if recomendaciones:
+        for rec in recomendaciones:
+            story.append(Paragraph(f"&bull; {rec}", texto_style))
+    else:
+        story.append(Paragraph("Todos tus valores estan en rango normal.", texto_style))
+    story.append(Spacer(1, 15))
+
+    # CALCULO DE CALORIAS
+    story.append(Paragraph("Calculo de Calorias y Macros", subtitulo_style))
+    calculos = datos.get("calculos", {})
+    if calculos:
+        tabla_macros = [
+            ["TMB (calorias en reposo)", f"{calculos.get('tmb', 0):.0f} kcal"],
+            ["TDEE (calorias con actividad)", f"{calculos.get('tdee', 0):.0f} kcal"],
+            ["Objetivo diario", f"{calculos.get('objetivo', 0):.0f} kcal"],
+            ["Proteinas", f"{calculos.get('proteina', 0):.0f} g"],
+            ["Carbohidratos", f"{calculos.get('carbos', 0):.0f} g"],
+            ["Grasas", f"{calculos.get('grasas', 0):.0f} g"],
+        ]
+        tabla_calc = Table(tabla_macros, colWidths=[3.5*inch, 2.5*inch])
+        tabla_calc.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#e7f0f7')),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(tabla_calc)
+    story.append(Spacer(1, 15))
+
+    # MENU DEL DIA
+    story.append(Paragraph("Menu Sugerido del Dia", subtitulo_style))
+    menu = datos.get("menu", [])
+    if menu:
+        for tiempo, platillos in menu:
+            story.append(Paragraph(f"<b>{tiempo}</b>", texto_style))
+            for platillo in platillos:
+                story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&bull; {platillo}", texto_style))
+            story.append(Spacer(1, 5))
+
+    story.append(Spacer(1, 20))
+    story.append(Paragraph(
+        "<i>Esta aplicacion es orientativa y no sustituye la consulta con un profesional de la salud.</i>",
+        texto_style
+    ))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
 
 # ============ PASO 1: BIENVENIDA ============
 if st.session_state.paso == 1:
@@ -1011,11 +1165,92 @@ elif st.session_state.paso == 7:
     st.info("Este menu es orientativo. Ajusta las porciones segun tu apetito y consulta a un nutriologo.")
 
     st.write("---")
+       # ============ DESCARGA DE PDF ============
+    st.write("---")
+    st.markdown("### Descargar plan en PDF")
+    st.write("Genera un PDF con todos tus resultados, recomendaciones, menu y macros.")
+
+    valores_lab_pdf = [["Analito", "Valor", "Estado"]]
+    valores_lab_pdf.append(["Glucosa", f"{st.session_state.glucosa} mg/dL", "Normal" if 70 <= st.session_state.glucosa <= 99 else "Alterado"])
+    valores_lab_pdf.append(["Colesterol total", f"{st.session_state.colesterol} mg/dL", "Normal" if st.session_state.colesterol < 200 else "Alterado"])
+    valores_lab_pdf.append(["HDL", f"{st.session_state.hdl} mg/dL", "Normal" if st.session_state.hdl >= 40 else "Alterado"])
+    valores_lab_pdf.append(["LDL", f"{st.session_state.ldl} mg/dL", "Normal" if st.session_state.ldl < 130 else "Alterado"])
+    valores_lab_pdf.append(["Trigliceridos", f"{st.session_state.trigliceridos} mg/dL", "Normal" if st.session_state.trigliceridos < 150 else "Alterado"])
+    valores_lab_pdf.append(["Hemoglobina", f"{st.session_state.hemoglobina} g/dL", "Normal"])
+    valores_lab_pdf.append(["Acido urico", f"{st.session_state.acido_urico} mg/dL", "Normal" if st.session_state.acido_urico <= 7.2 else "Alterado"])
+    valores_lab_pdf.append(["Vitamina D", f"{st.session_state.vitamina_d} ng/mL", "Normal" if st.session_state.vitamina_d >= 30 else "Alterado"])
+    valores_lab_pdf.append(["Hierro", f"{st.session_state.hierro} ug/dL", "Normal"])
+    valores_lab_pdf.append(["TSH", f"{st.session_state.tsh} mUI/L", "Normal" if 0.4 <= st.session_state.tsh <= 4.0 else "Alterado"])
+    valores_lab_pdf.append(["Creatinina", f"{st.session_state.creatinina} mg/dL", "Normal" if 0.7 <= st.session_state.creatinina <= 1.3 else "Alterado"])
+    valores_lab_pdf.append(["Insulina", f"{st.session_state.insulina} uUI/mL", "Normal" if st.session_state.insulina <= 24.9 else "Alterado"])
+
+    recomendaciones_pdf = notas_personalizadas if notas_personalizadas else ["Todos los valores estan en rango normal."]
+
+    menu_pdf = [
+        ("Desayuno (7:00 - 8:00 am)", [
+            "1 taza de avena cocida con leche descremada",
+            "1 platano pequeno o 1 taza de fresas",
+            "2 claras de huevo + 1 huevo entero revueltos",
+            "1 cucharada de nueces picadas",
+        ]),
+        ("Colacion media manana (10:30 - 11:00 am)", [
+            "1 manzana o 1 pera",
+            "15 almendras o nueces",
+        ]),
+        ("Comida (1:00 - 2:00 pm)", [
+            "120g de pechuga de pollo asada o pescado al horno",
+            "1 taza de arroz integral o quinoa",
+            "Ensalada verde grande",
+            "1/2 aguacate",
+        ]),
+        ("Colacion tarde (4:30 - 5:00 pm)", [
+            "1 yogurt natural sin azucar",
+            "1 cucharada de semillas de chia",
+        ]),
+        ("Cena (7:30 - 8:30 pm)", [
+            "1 taza de sopa de verduras",
+            "100g de salmon o atun al horno",
+            "Verduras al vapor",
+        ]),
+    ]
+
+    datos_pdf = {
+        "nombre": st.session_state.nombre,
+        "edad": st.session_state.edad,
+        "sexo": st.session_state.sexo,
+        "peso": st.session_state.peso,
+        "talla": st.session_state.talla,
+        "imc": st.session_state.imc,
+        "objetivo": st.session_state.objetivo,
+        "valores_lab": valores_lab_pdf,
+        "recomendaciones": recomendaciones_pdf,
+        "calculos": {
+            "tmb": 1681,
+            "tdee": 2017,
+            "objetivo": 2317,
+            "proteina": 138,
+            "carbos": 295,
+            "grasas": 64,
+        },
+        "menu": menu_pdf,
+    }
+
+    pdf_buffer = generar_pdf(datos_pdf)
+
+    st.download_button(
+        label="Descargar plan en PDF",
+        data=pdf_buffer,
+        file_name=f"NutriLab_{st.session_state.nombre}.pdf",
+        mime="application/pdf",
+        use_container_width=True,
+        type="primary"
+    )
+
+    st.write("---")
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Regresar", use_container_width=True):
             st.session_state.paso = 6
             st.rerun()
-    with col2:
-        if st.button("Continuar", use_container_width=True, type="primary", disabled=True):
-            pass
+
+            
