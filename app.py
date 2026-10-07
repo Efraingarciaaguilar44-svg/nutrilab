@@ -1,4 +1,6 @@
 import streamlit as st
+import plotly.graph_objects as go
+import plotly.express as px
 
 # ============ CONFIGURACION ============
 st.set_page_config(
@@ -39,7 +41,7 @@ elif st.session_state.paso == 2:
         col1, col2 = st.columns(2)
         with col1:
             nombre = st.text_input("Nombre", value=st.session_state.get("nombre", ""))
-            edad = st.number_input("Edad (anos)", min_value=10, max_value=100, value=st.session_state.get("edad", 25))
+            edad = st.number_input("Edad (años)", min_value=10, max_value=100, value=st.session_state.get("edad", 25))
         with col2:
             sexo = st.selectbox("Sexo", ["Masculino", "Femenino", "Otro"],
                                 index=["Masculino", "Femenino", "Otro"].index(st.session_state.get("sexo", "Masculino")))
@@ -76,7 +78,7 @@ elif st.session_state.paso == 3:
     col1, col2 = st.columns(2)
     with col1:
         st.metric("Nombre", st.session_state.nombre or "Sin nombre")
-        st.metric("Edad", f"{st.session_state.edad} anos")
+        st.metric("Edad", f"{st.session_state.edad} años")
         st.metric("Sexo", st.session_state.sexo)
     with col2:
         st.metric("Peso", f"{st.session_state.peso} kg")
@@ -160,7 +162,7 @@ elif st.session_state.paso == 4:
 # ============ PASO 5: RESULTADOS ============
 elif st.session_state.paso == 5:
     st.header("Resultados de tu analisis")
-    st.write(f"**Paciente:** {st.session_state.nombre} - {st.session_state.edad} anos - {st.session_state.sexo}")
+    st.write(f"**Paciente:** {st.session_state.nombre} - {st.session_state.edad} años - {st.session_state.sexo}")
 
     # ============ SEMAFORO DE SALUD ============
     verdes = 0
@@ -394,6 +396,130 @@ elif st.session_state.paso == 5:
         st.success(f"Insulina: {ins} uUI/mL - NORMAL")
     else:
         st.error(f"Insulina: {ins} uUI/mL - ALTA (posible resistencia a la insulina)")
+
+    # ============ GRAFICO DE BARRAS ============
+    st.write("---")
+    st.markdown("### Grafico de valores")
+
+    # Datos para el grafico
+    valores_grafico = [
+        {"nombre": "Glucosa", "valor": g, "min": 70, "max": 99, "unidad": "mg/dL"},
+        {"nombre": "Colesterol", "valor": c, "min": 0, "max": 199, "unidad": "mg/dL"},
+        {"nombre": "HDL", "valor": h, "min": 40, "max": 60, "unidad": "mg/dL"},
+        {"nombre": "LDL", "valor": l, "min": 0, "max": 99, "unidad": "mg/dL"},
+        {"nombre": "Trigliceridos", "valor": t, "min": 0, "max": 149, "unidad": "mg/dL"},
+        {"nombre": "Acido urico", "valor": au, "min": 3.5, "max": 7.2, "unidad": "mg/dL"},
+        {"nombre": "Vitamina D", "valor": vd, "min": 30, "max": 100, "unidad": "ng/mL"},
+        {"nombre": "TSH", "valor": tsh, "min": 0.4, "max": 4.0, "unidad": "mUI/L"},
+        {"nombre": "Creatinina", "valor": cr, "min": 0.7, "max": 1.3, "unidad": "mg/dL"},
+        {"nombre": "Insulina", "valor": ins, "min": 2.6, "max": 24.9, "unidad": "uUI/mL"},
+    ]
+
+    nombres = [v["nombre"] for v in valores_grafico]
+    valores = [v["valor"] for v in valores_grafico]
+    maximos = [v["max"] for v in valores_grafico]
+
+    # Colores segun estado
+    colores = []
+    for v in valores_grafico:
+        if v["valor"] < v["min"] or v["valor"] > v["max"]:
+            if v["valor"] > v["max"] * 1.5 or v["valor"] < v["min"] * 0.5:
+                colores.append("#d62728")  # rojo
+            else:
+                colores.append("#ff7f0e")  # naranja
+        else:
+            colores.append("#2ca02c")  # verde
+
+    fig = go.Figure()
+
+    # Barra de rango maximo (referencia)
+    fig.add_trace(go.Bar(
+        x=nombres,
+        y=maximos,
+        name="Rango maximo normal",
+        marker_color="rgba(200, 200, 200, 0.3)",
+        hoverinfo="skip"
+    ))
+
+    # Barra de valores actuales
+    fig.add_trace(go.Bar(
+        x=nombres,
+        y=valores,
+        name="Tus valores",
+        marker_color=colores,
+        text=[f"{v:.1f}" for v in valores],
+        textposition="outside"
+    ))
+
+    fig.update_layout(
+        title="Tus valores vs rango maximo normal",
+        xaxis_title="Analito",
+        yaxis_title="Valor",
+        barmode="overlay",
+        height=500,
+        showlegend=True,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="white")
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.caption("Verde = en rango normal | Naranja = fuera de rango | Rojo = valor critico")
+
+    # ============ GRAFICO CIRCULAR DE MACROS ============
+    st.write("---")
+    st.markdown("### Distribucion de macronutrientes")
+
+    peso_actual = st.session_state.peso
+    talla_actual = st.session_state.talla
+    edad_actual = st.session_state.edad
+    sexo_actual = st.session_state.sexo
+    objetivo_actual = st.session_state.objetivo
+
+    if sexo_actual == "Masculino":
+        tmb_calc = (10 * peso_actual) + (6.25 * talla_actual) - (5 * edad_actual) + 5
+    else:
+        tmb_calc = (10 * peso_actual) + (6.25 * talla_actual) - (5 * edad_actual) - 161
+
+    tdee_calc = tmb_calc * 1.55
+
+    if objetivo_actual == "Bajar de peso":
+        cal_objetivo = tdee_calc - 500
+        prot_g = peso_actual * 2.0
+    elif objetivo_actual == "Ganar masa muscular":
+        cal_objetivo = tdee_calc + 300
+        prot_g = peso_actual * 1.8
+    else:
+        cal_objetivo = tdee_calc
+        prot_g = peso_actual * 1.2
+
+    gras_g = (cal_objetivo * 0.25) / 9
+    cal_restantes = cal_objetivo - (prot_g * 4) - (gras_g * 9)
+    carb_g = cal_restantes / 4
+
+    # Grafico circular
+    fig2 = go.Figure(data=[go.Pie(
+        labels=["Proteinas", "Carbohidratos", "Grasas"],
+        values=[prot_g * 4, carb_g * 4, gras_g * 9],
+        hole=0.4,
+        marker=dict(colors=["#1f77b4", "#ff7f0e", "#2ca02c"]),
+        textinfo="label+percent",
+        textfont=dict(size=14)
+    )])
+
+    fig2.update_layout(
+        title=f"Distribucion calorica diaria (Total: {int(cal_objetivo)} kcal)",
+        height=450,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="white")
+    )
+
+    st.plotly_chart(fig2, use_container_width=True)
+
+    st.caption(f"Proteinas: {int(prot_g)}g | Carbohidratos: {int(carb_g)}g | Grasas: {int(gras_g)}g")
+
 
     st.write("---")
     col1, col2 = st.columns(2)
@@ -737,7 +863,7 @@ elif st.session_state.paso == 7:
     """)
     st.caption("Aporte aproximado: 400 kcal | 20g proteina | 50g carbohidratos | 12g grasas")
 
-    st.markdown("#### Colacion media manana (10:30 - 11:00 am)")
+    st.markdown("#### Colacion media mañana (10:30 - 11:00 am)")
     st.markdown("""
     - 1 manzana o 1 pera
     - 15 almendras o nueces
